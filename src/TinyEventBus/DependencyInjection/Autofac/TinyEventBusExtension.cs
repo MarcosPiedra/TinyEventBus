@@ -11,6 +11,9 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using TinyEventBus.Factory;
+using ConnectionManager = TinyEventBus.RabbitMQ.ConnectionManager;
+using TinyEventBus.Configuration;
+using TinyEventBus.RabbitMQ.Connections;
 
 namespace TinyEventBus.DependencyInjection.Autofac
 {
@@ -23,6 +26,7 @@ namespace TinyEventBus.DependencyInjection.Autofac
             configure(configuration);
 
             configuration.RegisterHandlersManually();
+
             var suscriptionsManager = configuration.SubscriptionsManager;
             var factory = configuration.GetConnectionFactory();
 
@@ -37,9 +41,8 @@ namespace TinyEventBus.DependencyInjection.Autofac
             builder.RegisterInstance(configuration.Configure);
             builder.RegisterInstance(suscriptionsManager).As<ISubscriptionsManager>();
             builder.RegisterInstance(factory).As<IConnectionFactory>();
-            builder.RegisterType<Consumer>().As<IConsumer>();
             builder.RegisterType<RabbitMQConnection>().As<IRabbitMQConnection>();
-            builder.RegisterType<ConsumerFactory>().As(typeof(IFactory<string, IRabbitMQConnection, IConsumer>));
+            builder.RegisterType<ConnectionManager>().As(typeof(IFactory<IConnectionStrategy>));
             builder.RegisterType<HandlerFactory>().As(typeof(IFactory<EventType, EventHandlerType, object>));
 
             foreach (var h in suscriptionsManager.GetEventHandlersByEvent())
@@ -53,19 +56,18 @@ namespace TinyEventBus.DependencyInjection.Autofac
                 return (eventType, eventHandlerType) => context.ResolveKeyed(eventHandlerType.RegisterName, eventType.GenericEvent);
             });
 
-            builder.Register<Func<string, IRabbitMQConnection, IConsumer>>(c =>
-            {
-                var context = c.Resolve<IComponentContext>();
-                return (queueName, connection) =>
-                {
-                    var @params = new List<NamedParameter>
-                    {
-                        new NamedParameter("queueName", queueName),
-                        new NamedParameter("connection", connection)
-                    };
-                    return context.Resolve<IConsumer>(@params);
-                };
-            });
+            builder.RegisterType<PubSub>().Keyed<IConnectionStrategy>(ConnectionStrategy.PubSub);
+            builder.RegisterType<WorkQueue>().Keyed<IConnectionStrategy>(ConnectionStrategy.WorkQueue);
+
+            builder.Register<Func<IConnectionStrategy>>(c =>
+             {
+                 var context = c.Resolve<IComponentContext>();
+                 return () =>
+                 {
+                     var config = context.Resolve<TinyEventBusConfiguration>();
+                     return context.ResolveKeyed<IConnectionStrategy>(config.ConnectionStrategy);
+                 };
+             });
 
             return builder;
         }

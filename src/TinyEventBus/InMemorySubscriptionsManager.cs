@@ -105,26 +105,29 @@ namespace TinyEventBus
             }
         }
 
-        public IEnumerable<EventType> GetEvents(string name)
+        public IEnumerable<string> GetEventsNameGrouped(string queueName)
         {
-            return _queues.Where(q => q.Key == name).SelectMany(x => x.Value.Keys);
+            return _queues.Where(q => q.Key == queueName)
+                          .SelectMany(x => x.Value.Keys)
+                          .GroupBy(e => e.Name)
+                          .Select(q => q.Key);
         }
 
-        public IEnumerable<EventHandlerType> GetEventHandlersByEvents(string @event)
+        public IEnumerable<EventType> GetEvents(string eventName)
         {
-            return GetEventHandlersByEvent().Where(a => a.Item1.Name == @event).Select(a => a.Item2);
+            return _queues.SelectMany(q => q.Value.Keys).Where(e => e.Name == eventName);
         }
 
-        public EventType GetEvent(string eventName)
+        public IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent(string eventName = null)
         {
-            return _queues.SelectMany(q => q.Value.Keys).FirstOrDefault(e => e.Name == eventName);
-        }
+            var handlers = _queues.SelectMany(q => q.Value.SelectMany(e => e.Value.Select(eh => Tuple.Create(e.Key, eh))))
+                                  .GroupBy(a => a.Item2)
+                                  .Select(b => Tuple.Create(b.First().Item1, b.Key));
 
-        public IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent()
-        {
-            return _queues.SelectMany(q => q.Value.SelectMany(e => e.Value.Select(eh => Tuple.Create(e.Key, eh))))
-                          .GroupBy(a => a.Item2)
-                          .Select(b => Tuple.Create(b.First().Item1, b.Key));
+            if (!string.IsNullOrEmpty(eventName))
+                handlers = handlers.Where(a => a.Item1.Name == eventName);
+
+            return handlers;
         }
 
         public void SetOnQueueRemoved(Action<string> onQueueRemoved) => _onQueueRemoved = onQueueRemoved;

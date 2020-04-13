@@ -4,6 +4,10 @@ using System.Text;
 
 namespace TinyEventBus.Factory
 {
+    public interface IFactory<out O>
+    {
+        O Get();
+    }
     public interface IFactory<in I1, out O>
     {
         O Get(I1 input1);

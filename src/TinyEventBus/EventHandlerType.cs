@@ -1,14 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using TinyEventBus.Abstractions;
+using TinyEventBus.Events;
 
 namespace TinyEventBus
 {
     public class EventHandlerType
     {
-        public EventHandlerType(Type @event)
+        public EventHandlerType(Type handler)
         {
-            this.Type = @event;
+            if (!handler.GetInterfaces().Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEventHandler<>)))
+                throw new ArgumentException("Incorrect handler event");
+
+            this.Type = handler;
         }
 
         public Type Type { get; private set; }

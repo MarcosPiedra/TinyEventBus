@@ -22,87 +22,78 @@ namespace TinyEventBus.RabbitMQ
 {
     public class EventBusRabbitMQ : IEventBus, IDisposable
     {
-        private readonly IRabbitMQConnection _persistentConnection;
-        private readonly ILogger<EventBusRabbitMQ> _logger;
         private readonly ISubscriptionsManager _subscriptionManager;
+        private readonly ILogger<EventBusRabbitMQ> _logger;
         private readonly IFactory<EventType, EventHandlerType, object> _handlersFac;
-        private readonly IFactory<string, IRabbitMQConnection, IConsumer> _consumerFac;
+        private readonly IFactory<IConnectionStrategy> _connectionManager;
         private readonly TinyEventBusConfiguration _configuration;
-        private List<IConsumer> consumers = new List<IConsumer>();
+        private List<IConnectionStrategy> _connections = new List<IConnectionStrategy>();
 
-        public EventBusRabbitMQ(IRabbitMQConnection persistentConnection,
-                                ILogger<EventBusRabbitMQ> logger,
+        public EventBusRabbitMQ(ILogger<EventBusRabbitMQ> logger,
                                 ISubscriptionsManager subscriptionManager,
                                 IFactory<EventType, EventHandlerType, object> handlersFac,
-                                IFactory<string, IRabbitMQConnection, IConsumer> consumersFac,
+                                IFactory<IConnectionStrategy> connectionManager,
                                 TinyEventBusConfiguration configuration)
         {
-            _persistentConnection = persistentConnection ?? throw new ArgumentNullException(nameof(persistentConnection));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _subscriptionManager = subscriptionManager ?? throw new ArgumentNullException(nameof(subscriptionManager));
             _handlersFac = handlersFac;
-            _consumerFac = consumersFac;
+            _connectionManager = connectionManager;
             _configuration = configuration;
         }
 
         internal void Init()
         {
-            if (!_persistentConnection.IsConnected)
-            {
-                _persistentConnection.TryConnect();
-            }
-
             _subscriptionManager.SetOnEventRemoved(EventRemoved);
             _subscriptionManager.SetOnQueueRemoved(QueueRemoved);
 
             var queues = _subscriptionManager.GetQueues();
             foreach (var queue in queues)
             {
-                var events = _subscriptionManager.GetEvents(queue);
-                var consumer = _consumerFac.Get(queue, this._persistentConnection);
-                consumer.SetConsumerAction(messageReceived);
-                consumer.SetEvents(events);
-                consumers.Add(consumer);
-            }
+                var connection = _connectionManager.Get();
 
-            foreach (var c in consumers)
-            {
-                c.StartConsuming();
+                connection.Start(new StartParams()
+                {
+                    QueueName = queue,
+                    EventList = _subscriptionManager.GetEventsNameGrouped(queue),
+                    ConsumerAction = messageReceived,
+                });
+
+                _connections.Add(connection);
             }
         }
 
         private void QueueRemoved(string queue)
         {
-            var consumer = consumers.FirstOrDefault(c => c.QueueName == queue);
-            if (consumer == null)
+            var connection = _connections.FirstOrDefault(c => c.Queue == queue);
+            if (connection == null)
                 return;
 
-            consumer.Dispose();
-            consumers.Remove(consumer);
+            connection.Dispose();
+            _connections.Remove(connection);
         }
 
         private void EventRemoved(string queue, EventType eventType)
         {
-            var consumer = consumers.FirstOrDefault(c => c.QueueName == queue);
-            if (consumer == null)
+            var connection = _connections.FirstOrDefault(c => c.Queue == queue);
+            if (connection == null)
                 return;
 
-            consumer.RemoveEvent(eventType);
+            connection.RemoveEvent(eventType);
         }
 
         private async Task messageReceived(string queueName, string eventName, string body)
         {
             _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
 
-            var eventHandlers = _subscriptionManager.GetEventHandlersByEvents(eventName);
-            var eventType = _subscriptionManager.GetEvent(eventName);
+            var eventHandlers = _subscriptionManager.GetEventHandlersByEvent(eventName);
 
-            foreach (var e in eventHandlers)
+            foreach (var eh in eventHandlers)
             {
-                var @event = JsonConvert.DeserializeObject(body, eventType.Type);
-                var concreteType = typeof(IEventHandler<>).MakeGenericType(eventType.Type);
+                var @event = JsonConvert.DeserializeObject(body, eh.Item1.Type);
+                var concreteType = typeof(IEventHandler<>).MakeGenericType(eh.Item1.Type);
 
-                var handler = _handlersFac.Get(eventType, e);
+                var handler = _handlersFac.Get(eh.Item1, eh.Item2);
                 if (handler == null)
                     continue;
 
@@ -113,45 +104,13 @@ namespace TinyEventBus.RabbitMQ
 
         public void Publish<T>(T @event) where T : EventBase
         {
-            if (!_persistentConnection.IsConnected)
+            foreach (var connection in _connections)
             {
-                _persistentConnection.TryConnect();
-            }
-
-            var eventType = new EventType(@event.GetType());
-
-            var policy = Policy.Handle<BrokerUnreachableException>()
-                .Or<SocketException>()
-                .WaitAndRetry(this._configuration.Retries.Publish, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
+                var eventType = new EventType(@event.GetType());
+                if (connection.EventList.Contains(eventType.Name))
                 {
-                    _logger.LogWarning(ex, "Could not publish event: {EventId} after {Timeout}s ({ExceptionMessage})", @event.Id, $"{time.TotalSeconds:n1}", ex.Message);
-                });
-
-            _logger.LogTrace("Creating RabbitMQ channel to publish event: {EventId} ({EventName})", @event.Id, eventType.Name);
-
-            using (var channel = _persistentConnection.CreateModel())
-            {
-                _logger.LogTrace("Declaring RabbitMQ exchange to publish event: {EventId}", @event.Id);
-
-                channel.ExchangeDeclare(exchange: this._configuration.ExchangeName, type: "direct");
-
-                var message = JsonConvert.SerializeObject(@event);
-                var body = Encoding.UTF8.GetBytes(message);
-
-                policy.Execute(() =>
-                {
-                    var properties = channel.CreateBasicProperties();
-                    properties.DeliveryMode = 2; // persistent
-
-                    _logger.LogTrace("Publishing event to RabbitMQ: {EventId}", @event.Id);
-
-                    channel.BasicPublish(
-                        exchange: this._configuration.ExchangeName,                        
-                        routingKey: eventType.Name,
-                        mandatory: true,
-                        basicProperties: properties,
-                        body: body);
-                });
+                    connection.Publish(@event);
+                }
             }
         }
 
@@ -171,11 +130,11 @@ namespace TinyEventBus.RabbitMQ
 
         public void Dispose()
         {
-            foreach (var c in consumers)
+            foreach (var c in _connections)
             {
                 c.Dispose();
             }
-            consumers.Clear();
+            _connections.Clear();
         }
     }
 }

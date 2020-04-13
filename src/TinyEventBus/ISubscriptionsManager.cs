@@ -17,9 +17,8 @@ namespace TinyEventBus
         void RemoveSubscription(string queue, EventType eventType, EventHandlerType eventHandlerType);
         void RemoveSubscriptions(EventType eventType);
         void RemoveSubscriptions(EventType eventType, EventHandlerType eventHandlerType);
-        IEnumerable<EventType> GetEvents(string queue);
-        IEnumerable<EventHandlerType> GetEventHandlersByEvents(string @event);
-        IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent();
-        EventType GetEvent(string eventName);
+        IEnumerable<string> GetEventsNameGrouped(string queue);
+        IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent(string @eventName = null);
+        IEnumerable<EventType> GetEvents(string eventName);
     }
 }

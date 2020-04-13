@@ -12,6 +12,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using System.IO;
 using System.Reflection;
+using TinyEventBus;
+using TinyEventBus.RabbitMQ.Connections;
 
 namespace ConsoleTinyEventBus
 {
@@ -34,8 +36,13 @@ namespace ConsoleTinyEventBus
             builder.AddTinyEventBus(c =>
             {
                 c.WithConfigSection(tmpConfig);
+                c.Subscribe<EventHandlersB.OtherEvent, EventHandlersB.OtherEventHandler>("Queue1");
+                c.Subscribe<EventHandlersB.OtherEvent, EventHandlersB.OtherEventHandler>("Queue2");
+                c.Subscribe<EventHandlersA.SampleEvent, EventHandlersA.SampleEventHandler>("Queue1");
             });
-            builder.RegisterInstance(loggerFactory.CreateLogger<Consumer>());
+            builder.RegisterInstance(loggerFactory.CreateLogger<RabbitMQConnection>());
+            builder.RegisterInstance(loggerFactory.CreateLogger<WorkQueue>());
+            builder.RegisterInstance(loggerFactory.CreateLogger<PubSub>());
             builder.RegisterInstance(loggerFactory.CreateLogger<EventBusRabbitMQ>());
             builder.RegisterInstance(loggerFactory.CreateLogger<RabbitMQConnection>());
             builder.RegisterType<ConsoleLogger>().As<IConsoleLogger>();
@@ -43,6 +50,9 @@ namespace ConsoleTinyEventBus
 
             var bus = container.Resolve<IEventBus>();
             var log = container.Resolve<IConsoleLogger>();
+
+            Console.Read();
+
             log.Write("Publish EventHandlersA.OtherEvent");
             bus.Publish(new EventHandlersA.OtherEvent("EventHandlersA.OtherEvent"));
             log.Write("Publish EventHandlersB.OtherEvent");

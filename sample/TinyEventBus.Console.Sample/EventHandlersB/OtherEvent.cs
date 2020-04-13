@@ -7,7 +7,7 @@ namespace ConsoleTinyEventBus.EventHandlersB
 {
     public class OtherEvent : EventBase
     {
-        public string Text { get; internal set; }
+        public string Text { get; set; }
         public OtherEvent(string text) => Text = text;
     }
 }

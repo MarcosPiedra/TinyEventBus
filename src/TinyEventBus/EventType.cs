@@ -13,7 +13,7 @@ namespace TinyEventBus
         }
 
         public Type Type { get; private set; } = null;
-        public string Name => this.Type.FullName;
+        public string Name => this.Type.Name;
         public Type GenericEvent => typeof(IEventHandler<>).MakeGenericType(Type);
 
         public override int GetHashCode() => Type.GetHashCode() ^ Name.GetHashCode();
