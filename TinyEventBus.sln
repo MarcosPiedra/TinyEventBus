@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30002.166
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleTinyEventBus", "sample\ConsoleTinyEventBus\ConsoleTinyEventBus.csproj", "{F83F92A2-ED14-4C91-86B5-161E13FB8D93}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TinyEventBus.Console.Sample", "sample\TinyEventBus.Console.Sample\TinyEventBus.Console.Sample.csproj", "{F83F92A2-ED14-4C91-86B5-161E13FB8D93}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TinyEventBus", "src\TinyEventBus\TinyEventBus.csproj", "{20F4D87B-E4FD-48EB-9FF7-DDEDBE39ED09}"
 EndProject
