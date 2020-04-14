@@ -14,6 +14,7 @@ using System.IO;
 using System.Reflection;
 using TinyEventBus;
 using TinyEventBus.RabbitMQ.Connections;
+using System.Text;
 
 namespace ConsoleTinyEventBus
 {
@@ -36,9 +37,6 @@ namespace ConsoleTinyEventBus
             builder.AddTinyEventBus(c =>
             {
                 c.WithConfigSection(tmpConfig);
-                c.Subscribe<EventHandlersB.OtherEvent, EventHandlersB.OtherEventHandler>("Queue1");
-                c.Subscribe<EventHandlersB.OtherEvent, EventHandlersB.OtherEventHandler>("Queue2");
-                c.Subscribe<EventHandlersA.SampleEvent, EventHandlersA.SampleEventHandler>("Queue1");
             });
             builder.RegisterInstance(loggerFactory.CreateLogger<RabbitMQConnection>());
             builder.RegisterInstance(loggerFactory.CreateLogger<WorkQueue>());
@@ -51,16 +49,42 @@ namespace ConsoleTinyEventBus
             var bus = container.Resolve<IEventBus>();
             var log = container.Resolve<IConsoleLogger>();
 
-            Console.Read();
+            var sb = new StringBuilder();
+            sb.AppendLine("Option 1: Send a message from event EventHandlersA.OtherEvent");
+            sb.AppendLine("Option 2: Send a message from event EventHandlersB.OtherEvent");
+            sb.AppendLine("Option 3: Send a message from event EventHandlersA.SampleEvent");
+            sb.AppendLine("Esc: Exit");
 
-            log.Write("Publish EventHandlersA.OtherEvent");
-            bus.Publish(new EventHandlersA.OtherEvent("EventHandlersA.OtherEvent"));
-            log.Write("Publish EventHandlersB.OtherEvent");
-            bus.Publish(new EventHandlersB.OtherEvent("EventHandlersB.OtherEvent"));
-            log.Write("Publish EventHandlersA.SampleEvent");
-            bus.Publish(new EventHandlersA.SampleEvent("EventHandlersA.SampleEvent"));
+            Console.WriteLine(sb.ToString());
 
-            Console.Read();
+            ConsoleKeyInfo keyPressed;
+            var rdm = new Random();
+
+            do
+            {
+                keyPressed = Console.ReadKey(true);
+                var randomText = string.Join("", "".PadLeft(7, 'A').Select(c => (char)((int)c + (int)rdm.Next(0, 25))).ToArray());
+
+                if (keyPressed.Key == ConsoleKey.D1)
+                {
+                    Console.WriteLine($"Sending message {randomText} to OtherEvent");
+                    bus.Publish(new EventHandlersA.OtherEvent(randomText));
+                }
+                else if (keyPressed.Key == ConsoleKey.D2)
+                {
+                    Console.WriteLine($"Sending message {randomText} to OtherEvent");
+                    bus.Publish(new EventHandlersB.OtherEvent(randomText));
+                }
+                else if (keyPressed.Key == ConsoleKey.D3)
+                {
+                    Console.WriteLine($"Sending message {randomText} to SampleEvent");
+                    bus.Publish(new EventHandlersA.SampleEvent(randomText));
+                }
+                else if (keyPressed.Key == ConsoleKey.Escape)
+                {
+                    Console.WriteLine($"Exit!");
+                }
+            } while (keyPressed.Key != ConsoleKey.Escape);
         }
     }
 }

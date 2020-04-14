@@ -7,6 +7,7 @@ using RabbitMQ.Client.Exceptions;
 using System;
 using System.IO;
 using System.Net.Sockets;
+using TinyEventBus.Configuration;
 
 namespace TinyEventBus.RabbitMQ
 {
@@ -14,7 +15,7 @@ namespace TinyEventBus.RabbitMQ
     {
         private readonly IConnectionFactory _connectionFactory;
         private readonly ILogger<RabbitMQConnection> _logger;
-        private readonly int _retryCount;
+        private readonly TinyEventBusConfiguration _config;
         IConnection _connection;
         bool _disposed;
 
@@ -22,11 +23,11 @@ namespace TinyEventBus.RabbitMQ
 
         public RabbitMQConnection(IConnectionFactory connectionFactory,
                                   ILogger<RabbitMQConnection> logger,
-                                  int retryCount = 5)
+                                  TinyEventBusConfiguration config)
         {
             _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _retryCount = retryCount;
+            _config = config;
         }
 
         public bool IsConnected => _connection != null && _connection.IsOpen && !_disposed;
@@ -65,7 +66,7 @@ namespace TinyEventBus.RabbitMQ
             {
                 var policy = Policy.Handle<SocketException>()
                                    .Or<BrokerUnreachableException>()
-                                   .WaitAndRetry(_retryCount, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
+                                   .WaitAndRetry(_config.Retries.Connection, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
                                    {
                                        _logger.LogWarning(ex, "RabbitMQ Client could not connect after {TimeOut}s ({ExceptionMessage})", $"{time.TotalSeconds:n1}", ex.Message);
                                    }

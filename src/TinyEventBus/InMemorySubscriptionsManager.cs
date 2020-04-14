@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace TinyEventBus
 {
-    public partial class InMemorySubscriptionsManager : ISubscriptionsManager
+    public class InMemorySubscriptionsManager : ISubscriptionsManager
     {
         private readonly Dictionary<string, Dictionary<EventType, List<EventHandlerType>>> _queues;
         private Action<string> _onQueueRemoved;
@@ -17,8 +17,6 @@ namespace TinyEventBus
         {
             _queues = new Dictionary<string, Dictionary<EventType, List<EventHandlerType>>>();
         }
-
-        public IEnumerable<string> GetQueues() => this._queues.Select(q => q.Key);
 
         public void AddSubscription(string queue, EventType eventType, EventHandlerType eventHandlerType)
         {
@@ -37,6 +35,10 @@ namespace TinyEventBus
                 eventHandlersType.Add(eventHandlerType);
             }
         }
+
+        public void SetOnQueueRemoved(Action<string> onQueueRemoved) => _onQueueRemoved = onQueueRemoved;
+
+        public void SetOnEventRemoved(Action<string, EventType> onEventRemoved) => _onEventRemoved = onEventRemoved;
 
         public void RemoveSubscriptions(string queue)
         {
@@ -105,34 +107,42 @@ namespace TinyEventBus
             }
         }
 
+        public IEnumerable<string> GetQueues() => this._queues.Select(q => q.Key).AsEnumerable();
+
         public IEnumerable<string> GetEventsNameGrouped(string queueName)
         {
             return _queues.Where(q => q.Key == queueName)
                           .SelectMany(x => x.Value.Keys)
                           .GroupBy(e => e.Name)
-                          .Select(q => q.Key);
+                          .Select(q => q.Key)
+                          .AsEnumerable();
         }
 
         public IEnumerable<EventType> GetEvents(string eventName)
         {
-            return _queues.SelectMany(q => q.Value.Keys).Where(e => e.Name == eventName);
+            return _queues.SelectMany(q => q.Value.Keys)
+                          .Where(e => e.Name == eventName)
+                          .GroupBy(e => e)
+                          .Select(e => e.Key)
+                          .AsEnumerable();
         }
 
-        public IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent(string eventName = null)
+        public IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent(string queueName = null, string eventName = null)
         {
-            var handlers = _queues.SelectMany(q => q.Value.SelectMany(e => e.Value.Select(eh => Tuple.Create(e.Key, eh))))
-                                  .GroupBy(a => a.Item2)
-                                  .Select(b => Tuple.Create(b.First().Item1, b.Key));
+            var queues = _queues.AsQueryable();
+
+            if (!string.IsNullOrEmpty(queueName))
+                queues = queues.Where(q => q.Key == queueName);
+
+            var handlers = queues.SelectMany(q => q.Value.SelectMany(e => e.Value.Select(eh => Tuple.Create(e.Key, eh))))
+                                 .GroupBy(a => a.Item2)
+                                 .Select(b => Tuple.Create(b.First().Item1, b.Key));
 
             if (!string.IsNullOrEmpty(eventName))
                 handlers = handlers.Where(a => a.Item1.Name == eventName);
 
-            return handlers;
+            return handlers.AsEnumerable();
         }
-
-        public void SetOnQueueRemoved(Action<string> onQueueRemoved) => _onQueueRemoved = onQueueRemoved;
-
-        public void SetOnEventRemoved(Action<string, EventType> onEventRemoved) => _onEventRemoved = onEventRemoved;
 
     }
 }

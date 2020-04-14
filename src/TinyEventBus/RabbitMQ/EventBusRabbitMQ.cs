@@ -86,7 +86,7 @@ namespace TinyEventBus.RabbitMQ
         {
             _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
 
-            var eventHandlers = _subscriptionManager.GetEventHandlersByEvent(eventName);
+            var eventHandlers = _subscriptionManager.GetEventHandlersByEvent(queueName, eventName);
 
             foreach (var eh in eventHandlers)
             {
