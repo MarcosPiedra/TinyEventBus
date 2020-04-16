@@ -21,7 +21,6 @@ namespace TinyEventBus.RabbitMQ.Connections
         private readonly ILogger<PubSub> _logger;
         private readonly TinyEventBusConfiguration _configuration;
         private readonly string _exchangeType;
-        private Func<string, string, string, Task> _consumerAction = null;
         private IModel _channel;
 
         public PubSub(IRabbitMQConnection persistentConnection,
@@ -37,8 +36,9 @@ namespace TinyEventBus.RabbitMQ.Connections
                 _exchangeType = ExchangeType.Direct;
         }
 
-        public string Queue { get; private set; } = "";
-        public IEnumerable<string> EventList { get; private set; }
+        public string Queue { get; set; } = "";
+        public IEnumerable<string> EventList { get; set; } 
+        public Func<string, string, string, Task> ConsumerAction { get; set; } = null;
 
         public void Publish<T>(T @event) where T : EventBase
         {
@@ -81,16 +81,12 @@ namespace TinyEventBus.RabbitMQ.Connections
             _channel.QueueUnbind(queue: Queue, exchange: _configuration.ExchangeName, routingKey: eventType.Name);
         }
 
-        public void Start(StartParams @params)
+        public void Start()
         {
             if (!_connection.IsConnected)
             {
                 _connection.TryConnect();
             }
-
-            _consumerAction = @params.ConsumerAction;
-            Queue = @params.QueueName;
-            EventList = @params.EventList;
 
             _logger.LogTrace("Starting RabbitMQ basic consume");
 
@@ -112,7 +108,7 @@ namespace TinyEventBus.RabbitMQ.Connections
         {
             var eventName = @event.RoutingKey;
             var message = Encoding.UTF8.GetString(@event.Body);
-            var task = _consumerAction?.Invoke(Queue, eventName, message);
+            var task = ConsumerAction?.Invoke(Queue, eventName, message);
             _channel.BasicAck(@event.DeliveryTag, multiple: false);
             return task;
         }

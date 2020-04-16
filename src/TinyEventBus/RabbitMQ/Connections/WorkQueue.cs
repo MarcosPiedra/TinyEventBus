@@ -20,7 +20,6 @@ namespace TinyEventBus.RabbitMQ.Connections
         private readonly IRabbitMQConnection _connection;
         private readonly ILogger<WorkQueue> _logger;
         private readonly TinyEventBusConfiguration _configuration;
-        private Func<string, string, string, Task> _consumerAction;
         private IModel _channel;
 
         public WorkQueue(IRabbitMQConnection persistentConnection,
@@ -32,8 +31,9 @@ namespace TinyEventBus.RabbitMQ.Connections
             _configuration = configuration;
         }
 
-        public string Queue { get; private set; } = "";
-        public IEnumerable<string> EventList { get; private set; }
+        public string Queue { get; set; } = "";
+        public IEnumerable<string> EventList { get; set; }
+        public Func<string, string, string, Task> ConsumerAction { get; set; } = null;
 
         public void Publish<T>(T @event) where T : EventBase
         {
@@ -65,7 +65,7 @@ namespace TinyEventBus.RabbitMQ.Connections
                   }).Execute(() =>
                   {
                       var properties = _channel.CreateBasicProperties();
-                      properties.Persistent = true; 
+                      properties.Persistent = true;
 
                       _logger.LogTrace("Publishing event to RabbitMQ: {EventId}", @event.Id);
 
@@ -78,16 +78,12 @@ namespace TinyEventBus.RabbitMQ.Connections
 
         }
 
-        public void Start(StartParams @params)
+        public void Start()
         {
             if (!_connection.IsConnected)
             {
                 _connection.TryConnect();
             }
-
-            _consumerAction = @params.ConsumerAction;
-            Queue = @params.QueueName;
-            EventList = @params.EventList;
 
             _logger.LogTrace("Starting RabbitMQ basic consume");
 
@@ -104,7 +100,7 @@ namespace TinyEventBus.RabbitMQ.Connections
         private Task Consumer_Received(object sender, BasicDeliverEventArgs @event)
         {
             var message = JsonConvert.DeserializeObject<Message>(Encoding.UTF8.GetString(@event.Body));
-            var task = _consumerAction?.Invoke(Queue, message.EventName, message.EventContent);
+            var task = ConsumerAction?.Invoke(Queue, message.EventName, message.EventContent);
             _channel.BasicAck(@event.DeliveryTag, multiple: false);
             return task;
         }

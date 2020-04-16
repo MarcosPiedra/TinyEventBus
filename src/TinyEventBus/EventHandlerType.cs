@@ -18,8 +18,8 @@ namespace TinyEventBus
         }
 
         public Type Type { get; private set; }
-        public string Name => Type.FullName;
-        public string RegisterName => $"handler-{this.Name}";
+        public string Name => Type.Name;
+        public string RegisterName(EventType eventType) => $"handler-{this.Type.FullName}-{eventType.Name}";
 
         public override int GetHashCode() => Type.GetHashCode() ^ Name.GetHashCode();
         public override bool Equals(object obj)

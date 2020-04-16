@@ -15,8 +15,13 @@ using System.Reflection;
 using TinyEventBus;
 using TinyEventBus.RabbitMQ.Connections;
 using System.Text;
+using TinyEventBus.DependencyInjection.Builder;
+using System.Runtime.CompilerServices;
+using TineEventBus.Samples.Events;
+using SystemConsole = System.Console;
+using System.Collections.Generic;
 
-namespace ConsoleTinyEventBus
+namespace TinyEventBus.Samples.Console.ConsumerB
 {
     public class Program
     {
@@ -36,8 +41,20 @@ namespace ConsoleTinyEventBus
             var builder = new ContainerBuilder();
             builder.AddTinyEventBus(c =>
             {
-                c.WithConfigSection(tmpConfig);
+                c.ConfigSection(tmpConfig);
+
+                var assembly = typeof(EventA).Assembly;
+
+                c.Register(assembly)
+                    .AsConsumer()
+                        .InQueue("QueueB")
+                            .AddEvent("EventB")
+                            .AddEvent("EventBC")
+                            .AddEvent("EventABC")
+                            .ExcludeEventHandler("EventHandlerA")
+                            .ExcludeEventHandler("EventHandlerC");
             });
+
             builder.RegisterInstance(loggerFactory.CreateLogger<RabbitMQConnection>());
             builder.RegisterInstance(loggerFactory.CreateLogger<WorkQueue>());
             builder.RegisterInstance(loggerFactory.CreateLogger<PubSub>());
@@ -47,44 +64,10 @@ namespace ConsoleTinyEventBus
             var container = builder.Build();
 
             var bus = container.Resolve<IEventBus>();
-            var log = container.Resolve<IConsoleLogger>();
 
-            var sb = new StringBuilder();
-            sb.AppendLine("Option 1: Send a message from event EventHandlersA.OtherEvent");
-            sb.AppendLine("Option 2: Send a message from event EventHandlersB.OtherEvent");
-            sb.AppendLine("Option 3: Send a message from event EventHandlersA.SampleEvent");
-            sb.AppendLine("Esc: Exit");
-
-            Console.WriteLine(sb.ToString());
-
-            ConsoleKeyInfo keyPressed;
-            var rdm = new Random();
-
-            do
-            {
-                keyPressed = Console.ReadKey(true);
-                var randomText = string.Join("", "".PadLeft(7, 'A').Select(c => (char)((int)c + (int)rdm.Next(0, 25))).ToArray());
-
-                if (keyPressed.Key == ConsoleKey.D1)
-                {
-                    Console.WriteLine($"Sending message {randomText} to OtherEvent");
-                    bus.Publish(new EventHandlersA.OtherEvent(randomText));
-                }
-                else if (keyPressed.Key == ConsoleKey.D2)
-                {
-                    Console.WriteLine($"Sending message {randomText} to OtherEvent");
-                    bus.Publish(new EventHandlersB.OtherEvent(randomText));
-                }
-                else if (keyPressed.Key == ConsoleKey.D3)
-                {
-                    Console.WriteLine($"Sending message {randomText} to SampleEvent");
-                    bus.Publish(new EventHandlersA.SampleEvent(randomText));
-                }
-                else if (keyPressed.Key == ConsoleKey.Escape)
-                {
-                    Console.WriteLine($"Exit!");
-                }
-            } while (keyPressed.Key != ConsoleKey.Escape);
+            SystemConsole.WriteLine("Listening events in QueueB (press button for exit)");
+            SystemConsole.ReadKey(true);
+            SystemConsole.WriteLine("Exit!!");
         }
     }
 }

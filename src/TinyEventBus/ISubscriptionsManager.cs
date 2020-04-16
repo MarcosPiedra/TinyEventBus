@@ -8,17 +8,18 @@ namespace TinyEventBus
 {
     public interface ISubscriptionsManager
     {
-        IEnumerable<string> GetQueues();
+        IEnumerable<string> GetConsumersQueues();
+        void AddOrUpdateConsumer(string queue, EventType eventType, EventHandlerType eventHandlerType);
+        void AddOrUpdateProducer(EventType eventType);
         void SetOnQueueRemoved(Action<string> onRemoveQueue);
         void SetOnEventRemoved(Action<string, EventType> onEventRemoved);
-        void AddSubscription(string queue, EventType eventType, EventHandlerType eventHandlerType);
-        void RemoveSubscriptions(string queue);
-        void RemoveSubscriptions(string queue, EventType eventType);
-        void RemoveSubscription(string queue, EventType eventType, EventHandlerType eventHandlerType);
-        void RemoveSubscriptions(EventType eventType);
-        void RemoveSubscriptions(EventType eventType, EventHandlerType eventHandlerType);
-        IEnumerable<string> GetEventsNameGrouped(string queue);
-        IEnumerable<Tuple<EventType, EventHandlerType>> GetEventHandlersByEvent(string queueName = null, string eventName = null);
-        IEnumerable<EventType> GetEvents(string eventName);
+        void RemoveConsumer(string queue);
+        void RemoveConsumer(string queue, EventType eventType);
+        void RemoveConsumer(string queue, EventType eventType, EventHandlerType eventHandlerType);
+        void RemoveConsumer(EventType eventType);
+        void RemoveConsumer(EventType eventType, EventHandlerType eventHandlerType);
+        IEnumerable<string> GetConsumersEvents(string queue);
+        IEnumerable<Tuple<EventType, EventHandlerType>> GetConsumersEvents(string queueName = null, string eventName = null);
+        IEnumerable<string> GetProducerEvents();
     }
 }

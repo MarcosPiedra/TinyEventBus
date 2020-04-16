@@ -27,23 +27,23 @@ namespace TinyEventBus.UnitTest
                 SetAllEventHandlers(manager, i);
             }
 
-            Assert.Equal(queues.AsEnumerable(), manager.GetQueues());
+            Assert.Equal(queues.AsEnumerable(), manager.GetConsumersQueues());
         }
 
         [Fact]
         public void Should_Remove_And_Throw_Of_Events()
         {
             DoActionAndCheckEventsAndQueue(m => SetAllEventHandlers(m, 1),
-                                           m => m.RemoveSubscriptions(NewE<EventA>()));
+                                           m => m.RemoveConsumer(NewE<EventA>()));
 
             DoActionAndCheckEventsAndQueue(m => SetAllEventHandlers(m, 1),
-                                           m => m.RemoveSubscriptions(NewE<EventB>()));
+                                           m => m.RemoveConsumer(NewE<EventB>()));
 
             DoActionAndCheckEventsAndQueue(m => SetAllEventHandlers(m, 1),
                                            m =>
                                            {
-                                               m.RemoveSubscriptions(NewE<EventA>(), NewEH<EventHandlerA>());
-                                               m.RemoveSubscriptions(NewE<EventB>(), NewEH<EventHandlerB>());
+                                               m.RemoveConsumer(NewE<EventA>(), NewEH<EventHandlerA>());
+                                               m.RemoveConsumer(NewE<EventB>(), NewEH<EventHandlerB>());
                                            });
         }
 
@@ -58,7 +58,7 @@ namespace TinyEventBus.UnitTest
                                            },
                                            m =>
                                            {
-                                               m.RemoveSubscriptions("q1", NewE<EventA>());
+                                               m.RemoveConsumer("q1", NewE<EventA>());
                                            });
 
             DoActionAndCheckQueue(m =>
@@ -69,7 +69,7 @@ namespace TinyEventBus.UnitTest
                                   },
                                   m =>
                                   {
-                                      m.RemoveSubscriptions("q1");
+                                      m.RemoveConsumer("q1");
                                   });
         }
 
@@ -80,7 +80,7 @@ namespace TinyEventBus.UnitTest
             var managerComparer = new Mock<ISubscriptionsManager>();
             var eventsAinQ1 = 0;
 
-            managerComparer.Setup(m => m.AddSubscription(It.IsIn("q1"), It.IsIn(NewE<EventA>()), It.IsAny<EventHandlerType>()))
+            managerComparer.Setup(m => m.AddOrUpdateConsumer(It.IsIn("q1"), It.IsIn(NewE<EventA>()), It.IsAny<EventHandlerType>()))
                            .Callback<string, EventType, EventHandlerType>((a, b, c) => eventsAinQ1++);
 
             SetEventHandlersA(manager, 1);
@@ -90,13 +90,13 @@ namespace TinyEventBus.UnitTest
             SetEventHandlersB(manager, 2);
             SetEventHandlersB(managerComparer.Object, 2);
 
-            var x = manager.GetEventHandlersByEvent("q1", "x");
+            var x = manager.GetConsumersEvents("q1", "x");
             Assert.Empty(x);
 
-            x = manager.GetEventHandlersByEvent("q1", nameof(EventA));
+            x = manager.GetConsumersEvents("q1", nameof(EventA));
             Assert.Equal(2, eventsAinQ1);
 
-            var y = manager.GetEventsNameGrouped("q1");
+            var y = manager.GetConsumersEvents("q1");
             Assert.Single(y);
         }
 
@@ -109,7 +109,7 @@ namespace TinyEventBus.UnitTest
             {
                 toAdd.Invoke(m);
 
-                beforeDeleteQueue = new List<string>(m.GetQueues());
+                beforeDeleteQueue = new List<string>(m.GetConsumersQueues());
 
                 toRemove.Invoke(m);
             }
@@ -118,7 +118,7 @@ namespace TinyEventBus.UnitTest
             var eventTypesRemoved = new List<EventType>();
             var manager = InitAndWaitRemoved(toDo, out queuesRemoved, out eventTypesRemoved);
 
-            var currentQueue = manager.GetQueues();
+            var currentQueue = manager.GetConsumersQueues();
 
             beforeDeleteQueue.RemoveAll(q => queuesRemoved.Remove(q));
 
@@ -128,17 +128,15 @@ namespace TinyEventBus.UnitTest
         private void DoActionAndCheckEventsAndQueue(Action<ISubscriptionsManager> toAdd,
                                                     Action<ISubscriptionsManager> toRemove)
         {
-            List<EventType> beforeDeleteA = null;
-            List<EventType> beforeDeleteB = null;
+            List<EventType> beforeDeleteEvents = null;
             List<string> beforeDeleteQueue = null;
 
             void toDo(ISubscriptionsManager m)
             {
                 toAdd.Invoke(m);
 
-                beforeDeleteQueue = new List<string>(m.GetQueues());
-                beforeDeleteA = new List<EventType>(m.GetEvents(nameof(EventA)));
-                beforeDeleteB = new List<EventType>(m.GetEvents(nameof(EventB)));
+                beforeDeleteQueue = new List<string>(m.GetConsumersQueues());
+                beforeDeleteEvents = new List<EventType>(m.GetConsumersEvents().GroupBy(e => e.Item1).Select(e => e.Key));
 
                 toRemove.Invoke(m);
             }
@@ -147,17 +145,15 @@ namespace TinyEventBus.UnitTest
             var eventTypesRemoved = new List<EventType>();
             var manager = InitAndWaitRemoved(toDo, out queuesRemoved, out eventTypesRemoved);
 
-            var currentA = manager.GetEvents(nameof(EventA));
-            var currentB = manager.GetEvents(nameof(EventB));
-            var currentQueue = manager.GetQueues();
 
-            beforeDeleteA.RemoveAll(e => eventTypesRemoved.Contains(e));
-            beforeDeleteB.RemoveAll(e => eventTypesRemoved.Contains(e));
+            var currentQueue = manager.GetConsumersQueues();
             beforeDeleteQueue.RemoveAll(q => queuesRemoved.Remove(q));
-
-            Assert.Equal(currentA, beforeDeleteA.AsEnumerable());
-            Assert.Equal(currentB, beforeDeleteB.AsEnumerable());
             Assert.Equal(currentQueue, beforeDeleteQueue.AsEnumerable());
+
+            var currentEvents = manager.GetConsumersEvents().GroupBy(e => e.Item1).Select(e => e.Key);
+            beforeDeleteEvents.RemoveAll(e => eventTypesRemoved.Remove(e));
+            Assert.Equal(currentEvents, beforeDeleteEvents.AsEnumerable());
+
         }
 
         private ISubscriptionsManager InitAndWaitRemoved(Action<ISubscriptionsManager> toDo,
@@ -197,22 +193,22 @@ namespace TinyEventBus.UnitTest
 
         private void SetAllEventHandlers(ISubscriptionsManager manager, int queueNumber)
         {
-            manager.AddSubscription($"q{queueNumber}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA)));
-            manager.AddSubscription($"q{queueNumber}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA1)));
-            manager.AddSubscription($"q{queueNumber}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB)));
-            manager.AddSubscription($"q{queueNumber}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB1)));
+            manager.AddOrUpdateConsumer($"q{queueNumber}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA)));
+            manager.AddOrUpdateConsumer($"q{queueNumber}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA1)));
+            manager.AddOrUpdateConsumer($"q{queueNumber}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB)));
+            manager.AddOrUpdateConsumer($"q{queueNumber}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB1)));
         }
 
         private void SetEventHandlersA(ISubscriptionsManager manager, int i)
         {
-            manager.AddSubscription($"q{i}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA)));
-            manager.AddSubscription($"q{i}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA1)));
+            manager.AddOrUpdateConsumer($"q{i}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA)));
+            manager.AddOrUpdateConsumer($"q{i}", NewE<EventA>(), new EventHandlerType(typeof(EventHandlerA1)));
         }
 
         private void SetEventHandlersB(ISubscriptionsManager manager, int i)
         {
-            manager.AddSubscription($"q{i}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB)));
-            manager.AddSubscription($"q{i}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB1)));
+            manager.AddOrUpdateConsumer($"q{i}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB)));
+            manager.AddOrUpdateConsumer($"q{i}", NewE<EventB>(), new EventHandlerType(typeof(EventHandlerB1)));
         }
 
         private EventType NewE<T>() => new EventType(typeof(T));

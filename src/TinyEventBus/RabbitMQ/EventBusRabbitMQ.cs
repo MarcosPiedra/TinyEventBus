@@ -27,7 +27,8 @@ namespace TinyEventBus.RabbitMQ
         private readonly IFactory<EventType, EventHandlerType, object> _handlersFac;
         private readonly IFactory<IConnectionStrategy> _connectionManager;
         private readonly TinyEventBusConfiguration _configuration;
-        private List<IConnectionStrategy> _connections = new List<IConnectionStrategy>();
+        private List<IConnectionStrategy> _consumers = new List<IConnectionStrategy>();
+        private IConnectionStrategy _producer;
 
         public EventBusRabbitMQ(ILogger<EventBusRabbitMQ> logger,
                                 ISubscriptionsManager subscriptionManager,
@@ -47,35 +48,34 @@ namespace TinyEventBus.RabbitMQ
             _subscriptionManager.SetOnEventRemoved(EventRemoved);
             _subscriptionManager.SetOnQueueRemoved(QueueRemoved);
 
-            var queues = _subscriptionManager.GetQueues();
+            _producer = _connectionManager.Get();
+            _producer.EventList = _subscriptionManager.GetProducerEvents();
+
+            var queues = _subscriptionManager.GetConsumersQueues();
             foreach (var queue in queues)
             {
                 var connection = _connectionManager.Get();
-
-                connection.Start(new StartParams()
-                {
-                    QueueName = queue,
-                    EventList = _subscriptionManager.GetEventsNameGrouped(queue),
-                    ConsumerAction = messageReceived,
-                });
-
-                _connections.Add(connection);
+                connection.Queue = queue;
+                connection.EventList = _subscriptionManager.GetConsumersEvents(queue);
+                connection.ConsumerAction = messageReceived;
+                connection.Start();
+                _consumers.Add(connection);
             }
         }
 
         private void QueueRemoved(string queue)
         {
-            var connection = _connections.FirstOrDefault(c => c.Queue == queue);
+            var connection = _consumers.FirstOrDefault(c => c.Queue == queue);
             if (connection == null)
                 return;
 
             connection.Dispose();
-            _connections.Remove(connection);
+            _consumers.Remove(connection);
         }
 
         private void EventRemoved(string queue, EventType eventType)
         {
-            var connection = _connections.FirstOrDefault(c => c.Queue == queue);
+            var connection = _consumers.FirstOrDefault(c => c.Queue == queue);
             if (connection == null)
                 return;
 
@@ -86,7 +86,7 @@ namespace TinyEventBus.RabbitMQ
         {
             _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
 
-            var eventHandlers = _subscriptionManager.GetEventHandlersByEvent(queueName, eventName);
+            var eventHandlers = _subscriptionManager.GetConsumersEvents(queueName, eventName);
 
             foreach (var eh in eventHandlers)
             {
@@ -104,13 +104,10 @@ namespace TinyEventBus.RabbitMQ
 
         public void Publish<T>(T @event) where T : EventBase
         {
-            foreach (var connection in _connections)
+            var eventType = new EventType(@event.GetType());
+            if (_producer.EventList.Contains(eventType.Name))
             {
-                var eventType = new EventType(@event.GetType());
-                if (connection.EventList.Contains(eventType.Name))
-                {
-                    connection.Publish(@event);
-                }
+                _producer.Publish(@event);
             }
         }
 
@@ -120,21 +117,21 @@ namespace TinyEventBus.RabbitMQ
         {
             if (queue == null)
             {
-                this._subscriptionManager.RemoveSubscriptions(new EventType(typeof(T)), new EventHandlerType(typeof(TH)));
+                _subscriptionManager.RemoveConsumer(new EventType(typeof(T)), new EventHandlerType(typeof(TH)));
             }
             else
             {
-                this._subscriptionManager.RemoveSubscription(queue, new EventType(typeof(T)), new EventHandlerType(typeof(TH)));
+                _subscriptionManager.RemoveConsumer(queue, new EventType(typeof(T)), new EventHandlerType(typeof(TH)));
             }
         }
 
         public void Dispose()
         {
-            foreach (var c in _connections)
+            foreach (var c in _consumers)
             {
                 c.Dispose();
             }
-            _connections.Clear();
+            _consumers.Clear();
         }
     }
 }

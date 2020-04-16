@@ -16,7 +16,8 @@ namespace TinyEventBus.Configuration
         public string Password { get; set; } = "";
         public int Port { get; set; } = 0;
         public string VirtualHost { get; set; } = "";
-        public List<QueueConfiguration> Queues { get; set; } = new List<QueueConfiguration>();
+        public List<ConsumerConfiguration> Consumers { get; set; } = new List<ConsumerConfiguration>();
+        public List<ProducerConfiguration> Producers { get; set; } = new List<ProducerConfiguration>();
     }
 
     public enum ConnectionStrategy
@@ -31,9 +32,15 @@ namespace TinyEventBus.Configuration
         public int Publish { get; set; } = 0;
     }
 
-    public class QueueConfiguration
+    public class ConsumerConfiguration
     {
-        public string Name { get; set; } = "";
-        public List<String> Events { get; set; } = new List<String>();
+        public string QueueName { get; set; } = "";
+        public List<string> Events { get; set; } = new List<string>();
+        public List<string> ExcludeEventHandler { get; set; } = new List<string>();
+    }
+    public class ProducerConfiguration
+    {
+        public string QueueName { get; set; } = "";
+        public List<string> Events { get; set; } = new List<string>();
     }
 }

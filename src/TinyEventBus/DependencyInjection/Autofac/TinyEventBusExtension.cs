@@ -19,13 +19,13 @@ namespace TinyEventBus.DependencyInjection.Autofac
 {
     public static class TinyEventBusExtension
     {
-        public static ContainerBuilder AddTinyEventBus(this ContainerBuilder builder, Action<ITinyEventBusBuilder> configure)
+        public static ContainerBuilder AddTinyEventBus(this ContainerBuilder builder, Action<IConfigurationBuilder> configure)
         {
-            var configuration = new TinyEventBusBuilder();
+            var configuration = new ConfigurationBuilder();
 
             configure(configuration);
 
-            configuration.RegisterHandlersManually();
+            configuration.DoRegister();
 
             var suscriptionsManager = configuration.SubscriptionsManager;
             var factory = configuration.GetConnectionFactory();
@@ -45,15 +45,15 @@ namespace TinyEventBus.DependencyInjection.Autofac
             builder.RegisterType<ConnectionManager>().As(typeof(IFactory<IConnectionStrategy>));
             builder.RegisterType<HandlerFactory>().As(typeof(IFactory<EventType, EventHandlerType, object>));
 
-            foreach (var h in suscriptionsManager.GetEventHandlersByEvent())
+            foreach (var h in suscriptionsManager.GetConsumersEvents())
             {
-                builder.RegisterType(h.Item2.Type).Keyed(h.Item2.RegisterName, h.Item1.GenericEvent);
+                builder.RegisterType(h.Item2.Type).Keyed(h.Item2.RegisterName(h.Item1), h.Item1.GenericEvent);
             }
 
             builder.Register<Func<EventType, EventHandlerType, object>>(c =>
             {
                 var context = c.Resolve<IComponentContext>();
-                return (eventType, eventHandlerType) => context.ResolveKeyed(eventHandlerType.RegisterName, eventType.GenericEvent);
+                return (eventType, eventHandlerType) => context.ResolveKeyed(eventHandlerType.RegisterName(eventType), eventType.GenericEvent);
             });
 
             builder.RegisterType<PubSub>().Keyed<IConnectionStrategy>(ConnectionStrategy.PubSub);
